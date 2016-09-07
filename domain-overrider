@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+
+import sys
+import json
+
+try:
+    from http.server import HTTPServer, SimpleHTTPRequestHandler
+except ImportError:
+    from SimpleHTTPServer import SimpleHTTPRequestHandler
+    from BaseHTTPServer import HTTPServer
+
+try:
+    config = json.load(open('/usr/local/etc/domain-overrider.json', 'r'))
+except EOFError:
+    sys.stderr.write('Please create /usr/local/etc/domain-overrider.json\n')
+    exit(1)
+
+class Server(SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        SimpleHTTPRequestHandler.__init__(self, *args, **kwargs)
+    def do_GET(self):
+        host = self.headers['Host']
+        target = config['mapping'].get(host.lower())
+        if target:
+            if target[:6] not in ('http:/', 'https:'):
+                target = 'http://' + target
+            self.send_response(301)
+            self.send_header('Location', target)
+            self.end_headers()
+        else:
+            response = b'''\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>domain overrider</title>
+</head>
+<body>
+    <h1>Domain not configured</h1>
+</body>
+</html>'''
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html;charset=utf-8')
+            self.send_header('Content-Length', len(response))
+            self.end_headers()
+            self.wfile.write(response)
+
+HTTPServer(('127.0.0.1', 80), Server).serve_forever()
